@@ -3,6 +3,7 @@ Dynamic AI Pathfinding Agent
 A real-time, interactive pathfinding visualizer built with Python and Tkinter. 
 
 This project demonstrates informed search algorithms in both static and unpredictable, dynamic environments.
+
 🌟 Key Features
 Algorithm Comparison: Toggle between A Search* ($f = g + h$) and Greedy BFS ($f = h$).
 Dynamic Re-planning: Real-time obstacle spawning forces the agent to recalculate paths mid-movement.
