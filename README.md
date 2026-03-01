@@ -6,9 +6,13 @@ This project demonstrates informed search algorithms in both static and unpredic
 
 🌟 Key Features
 Algorithm Comparison: Toggle between A Search* ($f = g + h$) and Greedy BFS ($f = h$).
+
 Dynamic Re-planning: Real-time obstacle spawning forces the agent to recalculate paths mid-movement.
+
 Custom Heuristics: Compare Manhattan and Euclidean distance patterns.
+
 Interactive Grid: Drag-to-draw walls, randomize mazes, and reposition Start/Goal nodes.
+
 Live Metrics: Track Nodes Expanded, Path Cost, and Execution Time.
 
 🛠️ Technical StackLanguage: Python 3.xGUI: Tkinter (Standard Library)
@@ -23,6 +27,9 @@ No external dependencies are required.
 
 Configure: Select an Algorithm and Heuristic from the sidebar.
 Simulate: 
+
 Run Search: Visualizes the expansion of the search frontier.
+
 Dynamic Mode: Watch the agent navigate while the environment changes.
+
 Analyze: Compare performance via the Metrics panel.
