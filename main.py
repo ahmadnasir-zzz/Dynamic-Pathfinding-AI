@@ -1,137 +1,99 @@
-# AI 2002 – Assignment 2, Q6 | Dynamic Pathfinding Agent
-# Run: python pathfinding_agent.py 
-
 import tkinter as tk
 from tkinter import font as tkfont
 import heapq, math, random, time
 
-# ── Settings ──────────────────────────────────────────────────
-MIN_CELL   = 12
-MAX_CELL   = 40
-DEF_ROWS   = 20
-DEF_COLS   = 25
-ANIM_DELAY = 18     # ms per animation frame
-MOVE_DELAY = 130    # ms per agent step
-DYN_PROB   = 0.06   # wall-spawn probability per step
+ANIM_DELAY = 20
+MOVE_DELAY = 150
+DYN_PROB   = 0.05
 
 EMPTY = 0; WALL = 1; VISITED = 2; PATH = 3; FRONTIER = 4
 
-COLORS = {
-    EMPTY:    "#1C2235",
-    WALL:     "#0D0F17",
-    FRONTIER: "#F1C40F",   # Yellow
-    VISITED:  "#2E86C1",   # Blue
-    PATH:     "#27AE60",   # Green
-    "start":  "#2ECC71",
+C = {
+    EMPTY:    "#FFFFFF",
+    WALL:     "#2C3E50",
+    FRONTIER: "#F1C40F",
+    VISITED:  "#3498DB",
+    PATH:     "#2ECC71",
+    "start":  "#27AE60",
     "goal":   "#E74C3C",
-    "agent":  "#9B59B6",   # Purple
-    "grid":   "#2C3E50",
+    "agent":  "#8E44AD",
+    "line":   "#DDDDDD",
 }
 
-# ── Heuristics ────────────────────────────────────────────────
+
 def manhattan(a, b):
     return abs(a[0]-b[0]) + abs(a[1]-b[1])
 
 def euclidean(a, b):
     return math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2)
 
-# ── A* Search (expanded list) ─────────────────────────────────
 def run_astar(grid, rows, cols, start, goal, h_fn):
-    g_score = {start: 0}
-    parent  = {start: None}
-    closed  = set()
-    counter = 0
-    heap    = [(h_fn(start, goal), 0, start)]
-    visited_order = []
-
+    g = {start: 0}
+    parent = {start: None}
+    closed = set()
+    heap = [(h_fn(start, goal), 0, start)]
+    vis = []; ctr = 0
     while heap:
         _, _, cur = heapq.heappop(heap)
-        if cur in closed:
-            continue
-        closed.add(cur)
-        visited_order.append(cur)
-
+        if cur in closed: continue
+        closed.add(cur); vis.append(cur)
         if cur == goal:
             path, node = [], goal
-            while node is not None:
-                path.append(node); node = parent[node]
-            path.reverse()
-            return path, visited_order, len(closed)
-
+            while node: path.append(node); node = parent[node]
+            path.reverse(); return path, vis, len(closed)
         r, c = cur
         for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
             nr, nc = r+dr, c+dc
             if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] != WALL:
                 nb = (nr, nc)
                 if nb in closed: continue
-                ng = g_score[cur] + 1
-                if ng < g_score.get(nb, float('inf')):
-                    g_score[nb] = ng
-                    parent[nb]  = cur
-                    counter    += 1
-                    heapq.heappush(heap, (ng + h_fn(nb, goal), counter, nb))
+                ng = g[cur] + 1
+                if ng < g.get(nb, 9999):
+                    g[nb] = ng; parent[nb] = cur; ctr += 1
+                    heapq.heappush(heap, (ng + h_fn(nb, goal), ctr, nb))
+    return [], vis, len(closed)
 
-    return [], visited_order, len(closed)
-
-# ── Greedy Best-First Search (strict visited list) ────────────
 def run_gbfs(grid, rows, cols, start, goal, h_fn):
-    visited  = {start: None}
-    counter  = 0
-    heap     = [(h_fn(start, goal), 0, start)]
-    vis_ord  = []
-    expanded = 0
-
+    visited = {start: None}
+    heap = [(h_fn(start, goal), 0, start)]
+    vis = []; expanded = 0; ctr = 0
     while heap:
         _, _, cur = heapq.heappop(heap)
-        vis_ord.append(cur)
-        expanded += 1
-
+        vis.append(cur); expanded += 1
         if cur == goal:
             path, node = [], goal
-            while node is not None:
-                path.append(node); node = visited[node]
-            path.reverse()
-            return path, vis_ord, expanded
-
+            while node: path.append(node); node = visited[node]
+            path.reverse(); return path, vis, expanded
         r, c = cur
         for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
             nr, nc = r+dr, c+dc
             if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] != WALL:
                 nb = (nr, nc)
                 if nb not in visited:
-                    visited[nb] = cur
-                    counter    += 1
-                    heapq.heappush(heap, (h_fn(nb, goal), counter, nb))
-
-    return [], vis_ord, expanded
+                    visited[nb] = cur; ctr += 1
+                    heapq.heappush(heap, (h_fn(nb, goal), ctr, nb))
+    return [], vis, expanded
 
 
-# ── Main Application ──────────────────────────────────────────
 class App:
-    S_IDLE = "IDLE"; S_SEARCH = "SEARCH"; S_DONE = "DONE"; S_DYNAMIC = "DYNAMIC"
-    E_WALL = "wall"; E_ERASE  = "erase";  E_START = "start"; E_GOAL   = "goal"
-
     def __init__(self, root):
         self.root = root
-        root.title("AI 2002 — Dynamic Pathfinding Agent")
-        root.configure(bg="#12151F")
+        root.title("Dynamic Pathfinding Agent - AI 2002 Q6")
         root.resizable(True, True)
 
-        self.rows      = DEF_ROWS
-        self.cols      = DEF_COLS
-        self.cell_size = 28
-        self.grid      = [[EMPTY]*self.cols for _ in range(self.rows)]
-        self.start     = (0, 0)
-        self.goal      = (self.rows-1, self.cols-1)
+        self.rows = 20
+        self.cols = 25
+        self.cell = 26
+        self.grid = [[EMPTY]*self.cols for _ in range(self.rows)]
+        self.start = (0, 0)
+        self.goal  = (self.rows-1, self.cols-1)
 
-        self.algo      = tk.StringVar(value="astar")
-        self.heur      = tk.StringVar(value="manhattan")
-        self.edit_mode = self.E_WALL
-        self.state     = self.S_IDLE
-        self.density   = tk.DoubleVar(value=28)
+        self.algo    = tk.StringVar(value="astar")
+        self.heur    = tk.StringVar(value="manhattan")
+        self.density = tk.IntVar(value=30)
+        self.placing = None   # "start" or "goal" when user is placing
 
         self.visited_set  = set()
-        self.frontier_set = set()
         self.path_set     = set()
         self.vis_order    = []
         self.final_path   = []
@@ -142,184 +104,103 @@ class App:
         self.remain_path = []
         self.dyn_added   = set()
         self._dyn_id     = None
+        self.running     = False
 
-        self.m_nodes  = tk.StringVar(value="0")
-        self.m_cost   = tk.StringVar(value="0")
-        self.m_time   = tk.StringVar(value="0.00 ms")
-        self.m_status = tk.StringVar(value="Set start (S) and goal (G), then click Run Search.")
+        self.lbl_nodes = tk.StringVar(value="Nodes: -")
+        self.lbl_cost  = tk.StringVar(value="Cost: -")
+        self.lbl_time  = tk.StringVar(value="Time: -")
+        self.lbl_status= tk.StringVar(value="Left-click: wall  |  Right-click: erase  |  Set Start/Goal then click grid")
 
         self._build_ui()
-        self.redraw()
+        self._gen_maze()
 
-    # ── UI ────────────────────────────────────────────────────
     def _build_ui(self):
-        root = self.root
-        self.f_title   = tkfont.Font(family="Segoe UI", size=13, weight="bold")
-        self.f_section = tkfont.Font(family="Segoe UI", size=9,  weight="bold")
-        self.f_btn     = tkfont.Font(family="Segoe UI", size=9,  weight="bold")
-        self.f_lbl     = tkfont.Font(family="Segoe UI", size=9)
-        self.f_metric  = tkfont.Font(family="Consolas", size=11, weight="bold")
-        self.f_small   = tkfont.Font(family="Segoe UI", size=8)
+        fn  = tkfont.Font(family="Segoe UI", size=9)
+        fnb = tkfont.Font(family="Segoe UI", size=9, weight="bold")
+        fns = tkfont.Font(family="Segoe UI", size=8)
 
-        panel = tk.Frame(root, bg="#1A1F30", width=230)
-        panel.pack(side=tk.LEFT, fill=tk.Y, padx=(6,0), pady=6)
-        panel.pack_propagate(False)
+        # Top controls bar
+        top = tk.Frame(self.root, bg="#F0F0F0", pady=4)
+        top.pack(fill=tk.X, padx=6)
 
-        right = tk.Frame(root, bg="#12151F")
-        right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=6, pady=6)
+        def lbl(parent, text):
+            tk.Label(parent, text=text, bg="#F0F0F0", fg="#555", font=fns).pack(side=tk.LEFT, padx=(6,2))
 
-        self.canvas = tk.Canvas(right, bg="#0E1016", highlightthickness=0, cursor="crosshair")
-        self.canvas.pack(fill=tk.BOTH, expand=True)
-        self.canvas.bind("<Button-1>",  self._on_click)
-        self.canvas.bind("<B1-Motion>", self._on_drag)
-        self.canvas.bind("<Configure>", lambda e: self.redraw())
+        def sep():
+            tk.Frame(top, bg="#CCCCCC", width=1).pack(side=tk.LEFT, fill=tk.Y, pady=4, padx=4)
 
-        sb = tk.Frame(right, bg="#0D0F17", height=26)
-        sb.pack(fill=tk.X, side=tk.BOTTOM)
-        tk.Label(sb, textvariable=self.m_status, bg="#0D0F17", fg="#7F8C8D",
-                 font=self.f_small, anchor="w").pack(fill=tk.X, padx=8, pady=4)
-
-        p = panel
-        tk.Label(p, text="PATHFINDING AGENT", bg="#1A1F30", fg="#5DADE2",
-                 font=self.f_title, anchor="w").pack(fill=tk.X, padx=10, pady=(10,0))
-        tk.Label(p, text="AI 2002  ·  Assignment 2  ·  Q6", bg="#1A1F30", fg="#566573",
-                 font=self.f_small, anchor="w").pack(fill=tk.X, padx=10, pady=(0,6))
-        self._div(p)
-
-        self._sec(p, "⊞  GRID CONFIGURATION")
-        f = tk.Frame(p, bg="#1A1F30"); f.pack(fill=tk.X, padx=10, pady=4)
+        # Grid size
+        lbl(top, "Rows:")
         self.v_rows = tk.IntVar(value=self.rows)
+        tk.Spinbox(top, from_=5, to=40, textvariable=self.v_rows, width=3, font=fn).pack(side=tk.LEFT)
+        lbl(top, "Cols:")
         self.v_cols = tk.IntVar(value=self.cols)
-        tk.Label(f, text="Rows:", bg="#1A1F30", fg="#AEB6BF",
-                 font=self.f_lbl).grid(row=0, column=0, sticky="w", pady=2)
-        tk.Spinbox(f, from_=5, to=40, textvariable=self.v_rows, width=5,
-                   bg="#2C3E50", fg="#ECF0F1", buttonbackground="#34495E",
-                   relief=tk.FLAT, font=self.f_lbl).grid(row=0, column=1, sticky="ew", padx=(6,0))
-        tk.Label(f, text="Cols:", bg="#1A1F30", fg="#AEB6BF",
-                 font=self.f_lbl).grid(row=1, column=0, sticky="w", pady=2)
-        tk.Spinbox(f, from_=5, to=55, textvariable=self.v_cols, width=5,
-                   bg="#2C3E50", fg="#ECF0F1", buttonbackground="#34495E",
-                   relief=tk.FLAT, font=self.f_lbl).grid(row=1, column=1, sticky="ew", padx=(6,0))
-        f.columnconfigure(1, weight=1)
+        tk.Spinbox(top, from_=5, to=55, textvariable=self.v_cols, width=3, font=fn).pack(side=tk.LEFT)
+        tk.Button(top, text="Apply", command=self._apply_grid, font=fn, padx=6).pack(side=tk.LEFT, padx=4)
 
-        df = tk.Frame(p, bg="#1A1F30"); df.pack(fill=tk.X, padx=10, pady=(4,0))
-        tk.Label(df, text="Wall density:", bg="#1A1F30", fg="#AEB6BF",
-                 font=self.f_lbl).pack(anchor="w")
-        dr = tk.Frame(df, bg="#1A1F30"); dr.pack(fill=tk.X)
-        tk.Scale(dr, from_=0, to=60, orient=tk.HORIZONTAL, variable=self.density,
-                 bg="#1A1F30", fg="#ECF0F1", troughcolor="#2C3E50",
-                 highlightthickness=0, font=self.f_small,
-                 sliderlength=14, length=140, showvalue=False).pack(side=tk.LEFT)
-        self._dens_lbl = tk.Label(dr, text="28%", bg="#1A1F30", fg="#F1C40F",
-                                   font=self.f_metric, width=4)
-        self._dens_lbl.pack(side=tk.LEFT)
-        self.density.trace_add("write",
-            lambda *a: self._dens_lbl.config(text=f"{int(self.density.get())}%"))
+        sep()
 
-        gf = tk.Frame(p, bg="#1A1F30"); gf.pack(fill=tk.X, padx=10, pady=6)
-        self._btn(gf, "Apply Grid",   self._apply_grid,  "#1A5276").pack(fill=tk.X, pady=2)
-        row = tk.Frame(gf, bg="#1A1F30"); row.pack(fill=tk.X)
-        self._btn(row, "Random Maze", self._random_maze, "#145A32").pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0,2))
-        self._btn(row, "Clear Grid",  self._clear_grid,  "#6E2F1A").pack(side=tk.LEFT, expand=True, fill=tk.X)
-        self._div(p)
+        # Density
+        lbl(top, "Density:")
+        tk.Scale(top, from_=0, to=60, orient=tk.HORIZONTAL, variable=self.density,
+                 length=80, showvalue=False, sliderlength=12, bg="#F0F0F0",
+                 highlightthickness=0).pack(side=tk.LEFT)
+        tk.Label(top, textvariable=self.density, bg="#F0F0F0", font=fns, width=2).pack(side=tk.LEFT)
+        tk.Button(top, text="Random Maze", command=self._gen_maze, font=fn, padx=6).pack(side=tk.LEFT, padx=2)
+        tk.Button(top, text="Clear",       command=self._clear,    font=fn, padx=6).pack(side=tk.LEFT, padx=2)
 
-        self._sec(p, "⚙  ALGORITHM")
-        af = tk.Frame(p, bg="#1A1F30"); af.pack(fill=tk.X, padx=12, pady=4)
-        for text, val in [("A* Search (f = g + h)", "astar"), ("Greedy BFS (f = h only)", "greedy")]:
-            tk.Radiobutton(af, text=text, variable=self.algo, value=val,
-                           bg="#1A1F30", fg="#AEB6BF", selectcolor="#2C3E50",
-                           activebackground="#1A1F30", activeforeground="#ECF0F1",
-                           font=self.f_lbl, cursor="hand2").pack(anchor="w", pady=1)
+        sep()
 
-        self._sec(p, "📐  HEURISTIC")
-        hf = tk.Frame(p, bg="#1A1F30"); hf.pack(fill=tk.X, padx=12, pady=4)
-        for text, val in [("Manhattan  |x1-x2|+|y1-y2|", "manhattan"),
-                           ("Euclidean  √(dx²+dy²)", "euclidean")]:
-            tk.Radiobutton(hf, text=text, variable=self.heur, value=val,
-                           bg="#1A1F30", fg="#AEB6BF", selectcolor="#2C3E50",
-                           activebackground="#1A1F30", activeforeground="#ECF0F1",
-                           font=self.f_lbl, cursor="hand2").pack(anchor="w", pady=1)
-        self._div(p)
+        # Algorithm
+        lbl(top, "Algorithm:")
+        tk.Radiobutton(top, text="A*",   variable=self.algo, value="astar",  bg="#F0F0F0", font=fn).pack(side=tk.LEFT)
+        tk.Radiobutton(top, text="GBFS", variable=self.algo, value="greedy", bg="#F0F0F0", font=fn).pack(side=tk.LEFT)
 
-        self._sec(p, "✏  EDIT MODE")
-        ef = tk.Frame(p, bg="#1A1F30"); ef.pack(fill=tk.X, padx=10, pady=4)
-        r1 = tk.Frame(ef, bg="#1A1F30"); r1.pack(fill=tk.X, pady=2)
-        r2 = tk.Frame(ef, bg="#1A1F30"); r2.pack(fill=tk.X, pady=2)
-        self._edit_btns = {}
-        for label, mode, frame, bg in [
-            ("Draw Walls",  self.E_WALL,  r1, "#1A5276"),
-            ("Erase Walls", self.E_ERASE, r1, "#512E5F"),
-            ("Set Start",   self.E_START, r2, "#145A32"),
-            ("Set Goal",    self.E_GOAL,  r2, "#6E2F1A"),
-        ]:
-            b = self._btn(frame, label, lambda m=mode: self._set_edit(m), bg)
-            b.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
-            self._edit_btns[mode] = (b, bg)
-        self._highlight_edit()
-        self._div(p)
+        sep()
 
-        self._sec(p, "▶  RUN")
-        rb = tk.Frame(p, bg="#1A1F30"); rb.pack(fill=tk.X, padx=10, pady=4)
-        self._btn(rb, "▶  Run Search",       self._run_search,  "#1A5276", h=2).pack(fill=tk.X, pady=2)
-        self._btn(rb, "⚡  Dynamic Mode",     self._run_dynamic, "#7D6608", h=2).pack(fill=tk.X, pady=2)
-        self._btn(rb, "■  Stop / Reset",     self._stop,        "#641E16"     ).pack(fill=tk.X, pady=2)
-        self._div(p)
+        # Heuristic
+        lbl(top, "Heuristic:")
+        tk.Radiobutton(top, text="Manhattan", variable=self.heur, value="manhattan", bg="#F0F0F0", font=fn).pack(side=tk.LEFT)
+        tk.Radiobutton(top, text="Euclidean", variable=self.heur, value="euclidean", bg="#F0F0F0", font=fn).pack(side=tk.LEFT)
 
-        self._sec(p, "📊  METRICS")
-        mf = tk.Frame(p, bg="#1A1F30"); mf.pack(fill=tk.X, padx=10, pady=6)
-        for label, var, col in [("Nodes Expanded", self.m_nodes, "#F1C40F"),
-                                  ("Path Cost",      self.m_cost,  "#27AE60"),
-                                  ("Exec Time",      self.m_time,  "#5DADE2")]:
-            row = tk.Frame(mf, bg="#1A1F30"); row.pack(fill=tk.X, pady=3)
-            tk.Label(row, text=label, bg="#1A1F30", fg="#7F8C8D",
-                     font=self.f_lbl, anchor="w").pack(side=tk.LEFT)
-            tk.Label(row, textvariable=var, bg="#1A1F30", fg=col,
-                     font=self.f_metric, anchor="e").pack(side=tk.RIGHT)
-        self._div(p)
+        sep()
 
-        self._sec(p, "🎨  LEGEND")
-        lf = tk.Frame(p, bg="#1A1F30"); lf.pack(fill=tk.X, padx=10, pady=4)
-        for color, label in [("#2ECC71", "Start"), ("#E74C3C", "Goal"),
-                               ("#F1C40F", "Frontier  (in queue)"),
-                               ("#2E86C1", "Expanded / Visited"),
-                               ("#27AE60", "Final Path"),
-                               ("#9B59B6", "Agent  (Dynamic Mode)"),
-                               ("#0D0F17", "Wall")]:
-            row = tk.Frame(lf, bg="#1A1F30"); row.pack(fill=tk.X, pady=1)
-            tk.Canvas(row, width=13, height=13, bg=color,
-                      highlightthickness=1, highlightbackground="#2C3E50").pack(side=tk.LEFT)
-            tk.Label(row, text=f"  {label}", bg="#1A1F30", fg="#AEB6BF",
-                     font=self.f_small, anchor="w").pack(side=tk.LEFT)
+        # Placement
+        self.btn_start = tk.Button(top, text="Set Start", command=lambda: self._set_placing("start"), font=fn, padx=6)
+        self.btn_start.pack(side=tk.LEFT, padx=2)
+        self.btn_goal  = tk.Button(top, text="Set Goal",  command=lambda: self._set_placing("goal"),  font=fn, padx=6)
+        self.btn_goal.pack(side=tk.LEFT, padx=2)
 
-    def _btn(self, parent, text, cmd, bg="#1A5276", h=1):
-        return tk.Button(parent, text=text, command=cmd, bg=bg, fg="#ECF0F1",
-                         activebackground="#2E86C1", activeforeground="white",
-                         relief=tk.FLAT, font=self.f_btn, height=h, cursor="hand2", padx=4, pady=2)
+        sep()
 
-    def _sec(self, p, text):
-        tk.Label(p, text=text, bg="#1A1F30", fg="#85929E",
-                 font=self.f_section, anchor="w").pack(fill=tk.X, padx=10, pady=(6,2))
+        # Run buttons
+        tk.Button(top, text="Run Search",   command=self._run_search,  font=fnb, padx=6, fg="#27AE60").pack(side=tk.LEFT, padx=2)
+        tk.Button(top, text="Dynamic Mode", command=self._run_dynamic, font=fnb, padx=6, fg="#E67E22").pack(side=tk.LEFT, padx=2)
+        tk.Button(top, text="Stop",         command=self._stop,        font=fn,  padx=6).pack(side=tk.LEFT, padx=2)
 
-    def _div(self, p):
-        tk.Frame(p, bg="#2C3E50", height=1).pack(fill=tk.X, padx=8, pady=3)
+        # Canvas
+        self.canvas = tk.Canvas(self.root, bg="white", highlightthickness=1, highlightbackground="#CCCCCC")
+        self.canvas.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
+        self.canvas.bind("<Button-1>",        self._click)
+        self.canvas.bind("<B1-Motion>",       self._drag)
+        self.canvas.bind("<Button-3>",        self._rclick)
+        self.canvas.bind("<B3-Motion>",       self._rdrag)
+        self.canvas.bind("<Configure>",       lambda e: self.redraw())
 
-    def _set_edit(self, mode):
-        self.edit_mode = mode
-        self._highlight_edit()
-        self.m_status.set({
-            self.E_WALL:  "Click / drag to draw walls.",
-            self.E_ERASE: "Click / drag to erase walls.",
-            self.E_START: "Click a cell to place the Start node (S).",
-            self.E_GOAL:  "Click a cell to place the Goal node (G).",
-        }[mode])
+        # Bottom status + metrics
+        bot = tk.Frame(self.root, bg="#F8F8F8")
+        bot.pack(fill=tk.X, padx=6, pady=(0,4))
+        tk.Label(bot, textvariable=self.lbl_status, bg="#F8F8F8", fg="#555", font=fns, anchor="w").pack(side=tk.LEFT, padx=6)
+        for var in [self.lbl_time, self.lbl_cost, self.lbl_nodes]:
+            tk.Label(bot, textvariable=var, bg="#F8F8F8", fg="#333",
+                     font=tkfont.Font(family="Consolas", size=9, weight="bold")).pack(side=tk.RIGHT, padx=10)
 
-    def _highlight_edit(self):
-        active = {self.E_WALL: "#2E86C1", self.E_ERASE: "#8E44AD",
-                  self.E_START: "#1E8449", self.E_GOAL: "#C0392B"}
-        for mode, (btn, base) in self._edit_btns.items():
-            btn.config(bg=active[mode] if mode == self.edit_mode else base)
+    def _set_placing(self, mode):
+        self.placing = mode
+        self.btn_start.config(relief=tk.SUNKEN if mode == "start" else tk.RAISED)
+        self.btn_goal.config( relief=tk.SUNKEN if mode == "goal"  else tk.RAISED)
+        self.lbl_status.set(f"Click on the grid to place the {'Start' if mode == 'start' else 'Goal'} node.")
 
-    # ── Grid helpers ──────────────────────────────────────────
     def _apply_grid(self):
         self._stop()
         self.rows  = max(5, min(40, self.v_rows.get()))
@@ -327,85 +208,81 @@ class App:
         self.start = (0, 0)
         self.goal  = (self.rows-1, self.cols-1)
         self.grid  = [[EMPTY]*self.cols for _ in range(self.rows)]
-        self._random_maze()
+        self._gen_maze()
 
-    def _random_maze(self):
+    def _gen_maze(self):
         d = self.density.get() / 100.0
         for r in range(self.rows):
             for c in range(self.cols):
-                if (r,c) in (self.start, self.goal):
-                    self.grid[r][c] = EMPTY
-                else:
-                    self.grid[r][c] = WALL if random.random() < d else EMPTY
-        self._reset_overlay()
-        self.redraw()
+                self.grid[r][c] = WALL if random.random() < d and (r,c) not in (self.start, self.goal) else EMPTY
+        self._reset(); self.redraw()
 
-    def _clear_grid(self):
+    def _clear(self):
         self._stop()
         self.grid = [[EMPTY]*self.cols for _ in range(self.rows)]
-        self._reset_overlay()
-        self.redraw()
+        self._reset(); self.redraw()
 
-    def _reset_overlay(self):
-        self.visited_set = set(); self.frontier_set = set(); self.path_set = set()
-        self.vis_order   = [];    self.final_path   = [];    self.vis_index = 0
-        self.dyn_added   = set(); self.agent_pos    = None;  self.remain_path = []
-        self.m_nodes.set("0"); self.m_cost.set("0"); self.m_time.set("0.00 ms")
+    def _reset(self):
+        self.visited_set = set(); self.path_set = set()
+        self.vis_order = []; self.final_path = []; self.vis_index = 0
+        self.dyn_added = set(); self.agent_pos = None; self.remain_path = []
+        self.lbl_nodes.set("Nodes: -"); self.lbl_cost.set("Cost: -"); self.lbl_time.set("Time: -")
 
-    # ── Canvas interaction ────────────────────────────────────
     def _offsets(self):
         cw = max(1, self.canvas.winfo_width())
         ch = max(1, self.canvas.winfo_height())
-        cs = self.cell_size
-        return max(0, (cw - cs*self.cols)//2), max(0, (ch - cs*self.rows)//2)
+        self.cell = max(8, min(40, cw // self.cols, ch // self.rows))
+        cs = self.cell
+        return max(0,(cw - cs*self.cols)//2), max(0,(ch - cs*self.rows)//2)
 
-    def _cell_at(self, event):
-        ox, oy = self._offsets()
-        cs = self.cell_size
-        c = (event.x - ox) // cs
-        r = (event.y - oy) // cs
-        if 0 <= r < self.rows and 0 <= c < self.cols:
-            return int(r), int(c)
+    def _cell_at(self, x, y):
+        ox, oy = self._offsets(); cs = self.cell
+        c = (x - ox) // cs; r = (y - oy) // cs
+        if 0 <= r < self.rows and 0 <= c < self.cols: return int(r), int(c)
         return None
 
-    def _on_click(self, event):
-        if self.state in (self.S_SEARCH, self.S_DYNAMIC): return
-        cell = self._cell_at(event)
+    def _click(self, event):
+        if self.running: return
+        cell = self._cell_at(event.x, event.y)
         if not cell: return
         r, c = cell
-        if self.edit_mode == self.E_START:
+        if self.placing == "start":
             self.grid[self.start[0]][self.start[1]] = EMPTY
-            self.start = (r, c); self.grid[r][c] = EMPTY; self._reset_overlay()
-        elif self.edit_mode == self.E_GOAL:
+            self.start = (r, c); self.grid[r][c] = EMPTY
+            self.placing = None
+            self.btn_start.config(relief=tk.RAISED)
+            self.btn_goal.config(relief=tk.RAISED)
+            self.lbl_status.set("Start placed. Left-click: wall  |  Right-click: erase")
+        elif self.placing == "goal":
             self.grid[self.goal[0]][self.goal[1]] = EMPTY
-            self.goal = (r, c); self.grid[r][c] = EMPTY; self._reset_overlay()
-        elif self.edit_mode == self.E_WALL:
-            if (r,c) not in (self.start, self.goal): self.grid[r][c] = WALL
-        elif self.edit_mode == self.E_ERASE:
-            if (r,c) not in (self.start, self.goal): self.grid[r][c] = EMPTY
+            self.goal = (r, c); self.grid[r][c] = EMPTY
+            self.placing = None
+            self.btn_start.config(relief=tk.RAISED)
+            self.btn_goal.config(relief=tk.RAISED)
+            self.lbl_status.set("Goal placed. Left-click: wall  |  Right-click: erase")
+        elif (r, c) not in (self.start, self.goal):
+            self.grid[r][c] = WALL
         self.redraw()
 
-    def _on_drag(self, event):
-        if self.state in (self.S_SEARCH, self.S_DYNAMIC): return
-        cell = self._cell_at(event)
-        if not cell or cell in (self.start, self.goal): return
-        r, c = cell
-        if   self.edit_mode == self.E_WALL:  self.grid[r][c] = WALL
-        elif self.edit_mode == self.E_ERASE: self.grid[r][c] = EMPTY
-        self.redraw()
+    def _drag(self, event):
+        if self.running or self.placing: return
+        cell = self._cell_at(event.x, event.y)
+        if cell and cell not in (self.start, self.goal):
+            self.grid[cell[0]][cell[1]] = WALL; self.redraw()
 
-    # ── Drawing ───────────────────────────────────────────────
-    def _recalc_cell(self):
-        cw = max(1, self.canvas.winfo_width())
-        ch = max(1, self.canvas.winfo_height())
-        self.cell_size = max(MIN_CELL, min(MAX_CELL, cw//self.cols, ch//self.rows))
+    def _rclick(self, event):
+        if self.running: return
+        cell = self._cell_at(event.x, event.y)
+        if cell and cell not in (self.start, self.goal):
+            self.grid[cell[0]][cell[1]] = EMPTY; self.redraw()
+
+    def _rdrag(self, event):
+        self._rclick(event)
 
     def redraw(self):
-        self._recalc_cell()
-        cs = self.cell_size
         ox, oy = self._offsets()
-        cv = self.canvas
-        cv.delete("all")
+        cs = self.cell
+        cv = self.canvas; cv.delete("all")
 
         for r in range(self.rows):
             for c in range(self.cols):
@@ -414,172 +291,128 @@ class App:
                 cell = (r, c)
 
                 if self.grid[r][c] == WALL:
-                    cv.create_rectangle(x1, y1, x2, y2, fill="#0D0F17", outline="#0D0F17")
-                    if cs >= 14:
-                        cv.create_line(x1, y1, x2, y1, fill="#1C2030")
-                        cv.create_line(x1, y1, x1, y2, fill="#1C2030")
+                    cv.create_rectangle(x1, y1, x2, y2, fill=C[WALL], outline=C[WALL])
                     continue
 
-                if   cell in self.path_set:     fill = COLORS[PATH]
-                elif cell in self.visited_set:  fill = COLORS[VISITED]
-                elif cell in self.frontier_set: fill = COLORS[FRONTIER]
-                else:                           fill = COLORS[EMPTY]
+                if   cell in self.path_set:    fill = C[PATH]
+                elif cell in self.visited_set: fill = C[VISITED]
+                else:                          fill = C[EMPTY]
 
-                cv.create_rectangle(x1, y1, x2, y2, fill=fill,
-                                    outline=COLORS["grid"], width=1)
+                cv.create_rectangle(x1, y1, x2, y2, fill=fill, outline=C["line"], width=1)
 
                 if cell == self.start:
-                    p = max(2, cs//6)
-                    cv.create_rectangle(x1+p, y1+p, x2-p, y2-p,
-                                        fill=COLORS["start"], outline="#82E0AA", width=2)
-                    if cs >= 18:
-                        cv.create_text(x1+cs//2, y1+cs//2, text="S", fill="white",
-                                       font=("Segoe UI", max(8,cs//3), "bold"))
+                    cv.create_rectangle(x1+2, y1+2, x2-2, y2-2, fill=C["start"], outline="")
+                    if cs >= 16: cv.create_text(x1+cs//2, y1+cs//2, text="S", fill="white",
+                                                font=("Segoe UI", max(7, cs//3), "bold"))
                 elif cell == self.goal:
-                    p = max(2, cs//6)
-                    cv.create_rectangle(x1+p, y1+p, x2-p, y2-p,
-                                        fill=COLORS["goal"], outline="#F1948A", width=2)
-                    if cs >= 18:
-                        cv.create_text(x1+cs//2, y1+cs//2, text="G", fill="white",
-                                       font=("Segoe UI", max(8,cs//3), "bold"))
+                    cv.create_rectangle(x1+2, y1+2, x2-2, y2-2, fill=C["goal"], outline="")
+                    if cs >= 16: cv.create_text(x1+cs//2, y1+cs//2, text="G", fill="white",
+                                                font=("Segoe UI", max(7, cs//3), "bold"))
 
-                if self.state == self.S_DYNAMIC and cell == self.agent_pos:
-                    cx = x1+cs//2; cy = y1+cs//2; rad = max(4, cs//2-3)
-                    cv.create_oval(cx-rad, cy-rad, cx+rad, cy+rad,
-                                   fill=COLORS["agent"], outline="#D2B4DE", width=2)
+                if self.agent_pos == cell:
+                    cx = x1+cs//2; cy = y1+cs//2; rad = max(3, cs//2-3)
+                    cv.create_oval(cx-rad, cy-rad, cx+rad, cy+rad, fill=C["agent"], outline="white", width=1)
 
-    # ── Algorithm runner ──────────────────────────────────────
-    def _invoke(self, from_pos=None):
+    def _invoke(self, src=None):
         h_fn = manhattan if self.heur.get() == "manhattan" else euclidean
-        src  = from_pos or self.start
+        src  = src or self.start
         t0   = time.perf_counter()
         if self.algo.get() == "astar":
             path, vis, n = run_astar(self.grid, self.rows, self.cols, src, self.goal, h_fn)
         else:
             path, vis, n = run_gbfs( self.grid, self.rows, self.cols, src, self.goal, h_fn)
         ms = (time.perf_counter() - t0) * 1000
-        self.m_nodes.set(str(n))
-        self.m_cost.set(str(len(path)-1) if path else "—")
-        self.m_time.set(f"{ms:.2f} ms")
+        self.lbl_nodes.set(f"Nodes: {n}")
+        self.lbl_cost.set(f"Cost: {len(path)-1}" if path else "Cost: -")
+        self.lbl_time.set(f"Time: {ms:.1f}ms")
         return path, vis, ms
 
-    # ── Run Search (animated) ─────────────────────────────────
     def _run_search(self):
-        self._cancel(); self._reset_overlay()
-        self.state = self.S_SEARCH
-        self.root.title("AI 2002 – Pathfinding  [SEARCHING…]")
-
+        self._stop(); self._reset()
+        self.running = True
         path, vis, ms = self._invoke()
         self.vis_order = vis; self.final_path = path; self.vis_index = 0
-
         if not path:
-            self.m_status.set("❌  No path found — clear some walls and try again.")
-            self.state = self.S_DONE
-            self.root.title("AI 2002 – Pathfinding  [NO PATH]")
-            return
+            self.lbl_status.set("No path found. Clear some walls and try again.")
+            self.running = False; return
+        self.lbl_status.set(f"Path found | Cost={len(path)-1} | Nodes={self.lbl_nodes.get().split()[1]} | {ms:.1f}ms")
+        self._anim()
 
-        self.m_status.set(f"✅  Path found  ·  Cost = {len(path)-1}  ·  "
-                          f"Nodes = {self.m_nodes.get()}  ·  {ms:.2f} ms")
-        self._anim_step()
-
-    def _anim_step(self):
-        if self.state != self.S_SEARCH: return
+    def _anim(self):
+        if not self.running: return
         for _ in range(4):
             if self.vis_index < len(self.vis_order):
-                self.visited_set.add(self.vis_order[self.vis_index])
-                self.vis_index += 1
+                self.visited_set.add(self.vis_order[self.vis_index]); self.vis_index += 1
             else:
                 for cell in self.final_path: self.path_set.add(cell)
-                self.state = self.S_DONE
-                self.root.title("AI 2002 – Pathfinding  [DONE]")
-                self.redraw(); return
+                self.running = False; self.redraw(); return
         self.redraw()
-        self._anim_id = self.root.after(ANIM_DELAY, self._anim_step)
+        self._anim_id = self.root.after(ANIM_DELAY, self._anim)
 
-    # ── Dynamic Mode ──────────────────────────────────────────
     def _run_dynamic(self):
-        self._cancel(); self._reset_overlay()
-        self.state = self.S_DYNAMIC
-        self.root.title("AI 2002 – Pathfinding  [DYNAMIC MODE]")
-
+        self._stop(); self._reset()
+        self.running = True
         path, vis, ms = self._invoke()
         if not path:
-            self.m_status.set("❌  No initial path — clear some walls first.")
-            self.state = self.S_DONE; return
-
+            self.lbl_status.set("No initial path found. Clear some walls first.")
+            self.running = False; return
         self.visited_set = set(vis); self.path_set = set(path)
-        self.final_path  = path[:];  self.remain_path = path[:]
+        self.final_path  = path[:]; self.remain_path = path[:]
         self.agent_pos   = path[0]
-        self.m_status.set(f"⚡  Dynamic Mode  ·  {self.algo.get().upper()}  ·  "
-                          f"{self.heur.get().capitalize()}  ·  Initial cost = {len(path)-1}")
+        self.lbl_status.set(f"Dynamic Mode | {self.algo.get().upper()} | {self.heur.get().capitalize()} | Cost={len(path)-1}")
         self.redraw()
         self._dyn_id = self.root.after(MOVE_DELAY, self._dyn_step)
 
     def _dyn_step(self):
-        if self.state != self.S_DYNAMIC: return
+        if not self.running: return
 
         if self.agent_pos == self.goal:
-            self.m_status.set(f"🏁  Goal reached!  ·  Nodes = {self.m_nodes.get()}  ·  {self.m_time.get()}")
-            self.state = self.S_DONE
-            self.root.title("AI 2002 – Pathfinding  [DONE]")
-            self.redraw(); return
+            self.lbl_status.set(f"Goal reached! | {self.lbl_nodes.get()} | {self.lbl_time.get()}")
+            self.running = False; self.redraw(); return
 
         protected = {self.agent_pos, self.start, self.goal}
         if len(self.remain_path) > 1: protected.add(self.remain_path[1])
 
-        total_free = sum(1 for r in range(self.rows) for c in range(self.cols)
-                         if self.grid[r][c] == EMPTY and (r,c) not in protected)
-        spawn_p = DYN_PROB / max(1, total_free * 0.05)
-
+        free = sum(1 for r in range(self.rows) for c in range(self.cols)
+                   if self.grid[r][c] == EMPTY and (r,c) not in protected)
+        sp = DYN_PROB / max(1, free * 0.05)
         for r in range(self.rows):
             for c in range(self.cols):
                 if (r,c) not in protected and self.grid[r][c] == EMPTY:
-                    if random.random() < spawn_p:
-                        self.grid[r][c] = WALL
-                        self.dyn_added.add((r,c))
+                    if random.random() < sp:
+                        self.grid[r][c] = WALL; self.dyn_added.add((r,c))
 
-        blocked = any(self.grid[r][c] == WALL for (r,c) in self.remain_path[1:])
-
-        if blocked:
-            path, vis, ms = self._invoke(from_pos=self.agent_pos)
+        if any(self.grid[r][c] == WALL for r,c in self.remain_path[1:]):
+            path, vis, ms = self._invoke(src=self.agent_pos)
             self.visited_set = set(vis)
             if path:
                 self.remain_path = path[:]; self.path_set = set(path); self.final_path = path[:]
-                self.m_status.set(f"🔄  Re-planned  ·  New cost = {len(path)-1}  ·  {ms:.2f} ms")
+                self.lbl_status.set(f"Re-planned | New cost={len(path)-1} | {ms:.1f}ms")
             else:
-                self.m_status.set("❌  Agent is trapped — no route to goal!")
-                self.state = self.S_DONE
-                self.root.title("AI 2002 – Pathfinding  [BLOCKED]")
-                self.redraw(); return
+                self.lbl_status.set("Agent trapped - no route to goal.")
+                self.running = False; self.redraw(); return
 
         if len(self.remain_path) > 1:
-            self.remain_path.pop(0)
-            self.agent_pos = self.remain_path[0]
-            self.m_cost.set(str(len(self.final_path)-1))
+            self.remain_path.pop(0); self.agent_pos = self.remain_path[0]
+            self.lbl_cost.set(f"Cost: {len(self.final_path)-1}")
 
         self.redraw()
         self._dyn_id = self.root.after(MOVE_DELAY, self._dyn_step)
 
-    # ── Stop / Cancel ─────────────────────────────────────────
-    def _cancel(self):
+    def _stop(self):
+        self.running = False
         if self._anim_id: self.root.after_cancel(self._anim_id); self._anim_id = None
         if self._dyn_id:  self.root.after_cancel(self._dyn_id);  self._dyn_id  = None
-
-    def _stop(self):
-        self._cancel()
-        for (r,c) in self.dyn_added:
+        for r,c in self.dyn_added:
             if self.grid[r][c] == WALL: self.grid[r][c] = EMPTY
-        self._reset_overlay()
-        self.state = self.S_IDLE
-        self.root.title("AI 2002 — Dynamic Pathfinding Agent")
-        self.m_status.set("Stopped. Edit the grid or press Run Search / Dynamic Mode.")
+        self._reset()
+        self.lbl_status.set("Stopped. Left-click: wall  |  Right-click: erase")
         self.redraw()
 
 
 if __name__ == "__main__":
     root = tk.Tk()
-    root.geometry("1120x700")
-    root.minsize(780, 500)
-    app = App(root)
-    app._random_maze()
+    root.geometry("1050x650")
+    root.minsize(700, 450)
+    App(root)
     root.mainloop()
